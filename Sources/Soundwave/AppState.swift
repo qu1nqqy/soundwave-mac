@@ -14,6 +14,10 @@ final class AppState {
     private(set) var dominant: RGB = .warmWhite
     /// Что сейчас со связью с платой.
     private(set) var senderStatus = "Не указан адрес платы"
+    /// Что сейчас со звуком из Music.
+    private(set) var audioStatus = "Звук: Music закрыт"
+    /// Громкость басов 0...1 — для индикатора.
+    private(set) var audioLevel = 0.0
 
     // Настройки: переживают перезапуск (UserDefaults) и сразу уходят в отправку.
 
@@ -25,18 +29,32 @@ final class AppState {
             sender.setHost(host)
         }
     }
+    /// Насколько охотно засчитывать удары, 0...1.
+    var sensitivity: Double {
+        didSet {
+            save(sensitivity, for: .sensitivity)
+            applySensitivity()
+        }
+    }
 
     @ObservationIgnored private let nowPlaying = NowPlaying()
     @ObservationIgnored private let sender = LightSender()
+    @ObservationIgnored private let audio = AudioMonitor()
+    @ObservationIgnored private let analyzer = Analyzer()
 
     init() {
         let defaults = UserDefaults.standard
         enabled = defaults.object(forKey: Key.enabled.rawValue) as? Bool ?? true
         mode = defaults.string(forKey: Key.mode.rawValue).flatMap(LightMode.init(rawValue:)) ?? .single
         host = defaults.string(forKey: Key.host.rawValue) ?? ""
+        sensitivity = defaults.object(forKey: Key.sensitivity.rawValue) as? Double ?? 0.5
 
         sender.onStatus = { [weak self] status in self?.senderStatus = status }
         sender.setHost(host)
+        wireAudio()
+        applySensitivity()
+        audio.onStatus = { [weak self] status in self?.audioStatus = status }
+        audio.start()
         nowPlaying.onChange = { [weak self] track, artwork in
             self?.update(track: track, artwork: artwork)
         }
@@ -69,10 +87,28 @@ final class AppState {
         sender.setScene(scene)
     }
 
+    /// Звук → анализатор → отправка. Всё это крутится на очереди звука, мимо главного потока;
+    /// в главный поток приходит только индикатор громкости.
+    private func wireAudio() {
+        let analyzer = analyzer
+        let sender = sender
+        audio.tap.onSamples = { samples, sampleRate in analyzer.feed(samples, sampleRate: sampleRate) }
+        analyzer.onFrame = { level, beat in sender.audioFrame(level: level, beat: beat) }
+        analyzer.onMeter = { [weak self] level in
+            Task { @MainActor in self?.audioLevel = level }
+        }
+    }
+
+    private func applySensitivity() {
+        let analyzer = analyzer
+        let sensitivity = sensitivity
+        audio.tap.queue.async { analyzer.setSensitivity(sensitivity) }
+    }
+
     // MARK: - UserDefaults
 
     private enum Key: String {
-        case enabled, mode, host
+        case enabled, mode, host, sensitivity
     }
 
     private func save(_ value: Any, for key: Key) {
