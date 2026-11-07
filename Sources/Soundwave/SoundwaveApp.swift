@@ -2,9 +2,12 @@ import SwiftUI
 
 @main
 struct SoundwaveApp: App {
+    @State private var state = AppState()
+
     var body: some Scene {
         MenuBarExtra("Soundwave", systemImage: "waveform") {
-            Button("Выход") { NSApplication.shared.terminate(nil) }
+            MenuView(state: state)
         }
+        .menuBarExtraStyle(.window)
     }
 }
