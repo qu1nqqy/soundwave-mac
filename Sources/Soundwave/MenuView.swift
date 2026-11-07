@@ -19,6 +19,7 @@ struct MenuView: View {
             }
             .pickerStyle(.segmented)
             .labelsHidden()
+            AudioView(status: state.audioStatus, level: state.audioLevel, sensitivity: $state.sensitivity)
             VStack(alignment: .leading, spacing: 4) {
                 TextField("IP платы, например 192.168.1.50", text: $state.host)
                     .textFieldStyle(.roundedBorder)
@@ -98,6 +99,27 @@ private struct PaletteView: View {
             HStack(spacing: 6) {
                 Circle().fill(Color(dominant)).frame(width: 10, height: 10)
                 Text("Основной цвет").font(.caption).foregroundStyle(.secondary)
+            }
+        }
+    }
+}
+
+/// Громкость басов, статус звука и чувствительность к ударам.
+private struct AudioView: View {
+    let status: String
+    let level: Double
+    @Binding var sensitivity: Double
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Text(status).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                Spacer()
+            }
+            ProgressView(value: level).progressViewStyle(.linear)
+            HStack {
+                Text("Чувствительность").font(.caption)
+                Slider(value: $sensitivity, in: 0...1)
             }
         }
     }
