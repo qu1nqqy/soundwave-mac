@@ -6,6 +6,13 @@ APP      := build/Soundwave.app
 SIGN_ID  ?= Apple Development
 SOURCES  := Sources Tests Package.swift
 
+# Собираем тулчейном Xcode, даже если xcode-select смотрит на Command Line Tools:
+# у CLT бывает сломан плагин макросов Swift Testing («plugin for module 'TestingMacros' not found»).
+XCODE := /Applications/Xcode.app/Contents/Developer
+ifneq ($(wildcard $(XCODE)),)
+export DEVELOPER_DIR ?= $(XCODE)
+endif
+
 .DEFAULT_GOAL := help
 .PHONY: help build test app run install fmt lint check clean
 
