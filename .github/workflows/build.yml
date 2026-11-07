@@ -25,3 +25,23 @@ jobs:
 
       - name: Run tests
         run: make test
+
+  # Приложение целиком: собирается и упаковывается в .app.
+  app:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # в CI нет сертификата разработчика — подписываем ad-hoc
+      - name: Build app
+        run: make app SIGN_ID=-
+
+      - name: Pack
+        run: |
+          mkdir -p dist
+          ditto -c -k --keepParent build/Soundwave.app dist/Soundwave.zip
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: soundwave-mac-${{ github.sha }}
+          path: dist/*
