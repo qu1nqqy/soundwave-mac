@@ -73,3 +73,27 @@ jobs:
 
           Установка: распаковать \`Soundwave.zip\` в /Applications. Сборка подписана ad-hoc, поэтому при
           первом запуске: правый клик → «Открыть»."
+
+  notify:
+    needs: [test, app, release]
+    if: always()
+    runs-on: ubuntu-latest
+    env:
+      TELEGRAM_TO: ${{ secrets.TELEGRAM_TO }}
+      TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+    steps:
+      # без секретов (например, в форке) просто молчим, а не падаем
+      - name: Notify
+        if: env.TELEGRAM_TOKEN != '' && env.TELEGRAM_TO != ''
+        uses: appleboy/telegram-action@master
+        with:
+          to: ${{ secrets.TELEGRAM_TO }}
+          token: ${{ secrets.TELEGRAM_TOKEN }}
+          format: markdown
+          message: |
+            ${{ (contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')) && '❌ **Сборка упала**' || '✅ **Сборка прошла**' }}
+            Репозиторий: `${{ github.repository }}`
+            Ветка: `${{ github.ref_name }}`
+            Автор: `${{ github.actor }}`
+            test: `${{ needs.test.result }}` · app: `${{ needs.app.result }}` · release: `${{ needs.release.result }}`
+            🔗 [Workflow](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})
