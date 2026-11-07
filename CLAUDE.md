@@ -3,13 +3,27 @@
 Приложение для macOS для soundwave: следит за Apple Music, берёт цвета обложки и ритм
 и шлёт их по UDP на ESP32 (репо `soundwave-firmware`, там же задан формат пакета).
 
-## План
+## Устройство
 
-- Swift, приложение в строке меню (SwiftUI `MenuBarExtra`).
-- Трек и обложка — из Music.app (AppleScript / ScriptingBridge).
-- Звук — Core Audio process tap только для Music.app (macOS 14.2+), без BlackHole.
-- Ритм — FFT через Accelerate (vDSP), энергия басов + детектор всплесков.
-- Цвет — k-means по уменьшенной обложке, серые и тёмные цвета отбрасываются.
+- Swift Package + Makefile, приложение в строке меню (SwiftUI `MenuBarExtra`), macOS 15+, Swift 6.
+- `Sources/SoundwaveCore/` — логика без системных API (протокол, палитра, `Spectrum`, `BassLevel`,
+  `BeatDetector`, `Envelope`, `LightScene`). Всё, что можно проверить без системы, — сюда и под тесты
+  (`Tests/SoundwaveCoreTests/`, Swift Testing).
+- `Sources/Soundwave/` — приложение: `NowPlaying` (уведомления Music + AppleScript за обложкой),
+  `AudioTap` (Core Audio process tap на Music), `Analyzer`, `AudioMonitor`, `LightSender` (UDP:
+  состояние раз в секунду + 60 Гц в такт), `AppState`, `MenuView`.
+- Протокол задаёт прошивка (`soundwave-firmware`): Fill `0x01`, Palette `0x02`, Level `0x03`.
+  Меняешь протокол — меняй обе стороны и тесты с обеих сторон.
+
+## Сборка и проверки
+
+```sh
+make check   # lint + test + app — то же, что CI
+make run     # собрать, подписать «Apple Development», запустить
+```
+
+Makefile выставляет `DEVELOPER_DIR` на Xcode: у Command Line Tools сломан плагин TestingMacros.
+`.app` подписывается постоянным сертификатом, иначе TCC забывает разрешения после каждой пересборки.
 
 ## Кто что пишет
 
