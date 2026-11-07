@@ -25,7 +25,10 @@ final class LightSender: @unchecked Sendable {
     private var scene: LightScene?
     private var timers: [DispatchSourceTimer] = []
 
+    /// Последний уровень басов и максимум с прошлой отправки: окна звука идут чаще (~94/с),
+    /// чем пакеты (60/с), и без этого короткий пик мог бы проскочить между отправками.
     private var level = 0.0
+    private var peakLevel = 0.0
     private var envelope = Envelope()
     private var lastAudio: DispatchTime?
 
@@ -45,6 +48,7 @@ final class LightSender: @unchecked Sendable {
     func audioFrame(level: Double, beat: Bool) {
         queue.async { [self] in
             self.level = level
+            peakLevel = max(peakLevel, level)
             if beat { envelope.beat() }
             lastAudio = .now()
         }
@@ -116,7 +120,9 @@ final class LightSender: @unchecked Sendable {
         guard let scene, scene.isActive, hasAudio else { return }
         switch scene.mode {
         case .single: send(LightProtocol.fill(scene.dominant.dimmed(envelope.brightness)))
-        case .palette: send(LightProtocol.level(level))
+        case .palette:
+            send(LightProtocol.level(peakLevel))
+            peakLevel = level
         }
     }
 
