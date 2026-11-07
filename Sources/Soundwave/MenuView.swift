@@ -8,6 +8,9 @@ struct MenuView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             NowPlayingView(track: state.track, artwork: state.artwork)
+            if !state.palette.isEmpty {
+                PaletteView(palette: state.palette, dominant: state.dominant)
+            }
             Divider()
             HStack {
                 Spacer()
@@ -57,5 +60,38 @@ private struct NowPlayingView: View {
             }
             Spacer(minLength: 0)
         }
+    }
+}
+
+/// Цвета обложки слева направо: ширина полоски — доля площади. Под ней — основной цвет.
+private struct PaletteView: View {
+    let palette: [PaletteColor]
+    let dominant: RGB
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            GeometryReader { geometry in
+                HStack(spacing: 0) {
+                    ForEach(Array(palette.enumerated()), id: \.offset) { _, entry in
+                        Rectangle()
+                            .fill(Color(entry.color))
+                            .frame(width: geometry.size.width * entry.weight)
+                    }
+                }
+            }
+            .frame(height: 14)
+            .clipShape(RoundedRectangle(cornerRadius: 4))
+
+            HStack(spacing: 6) {
+                Circle().fill(Color(dominant)).frame(width: 10, height: 10)
+                Text("Основной цвет").font(.caption).foregroundStyle(.secondary)
+            }
+        }
+    }
+}
+
+extension Color {
+    init(_ rgb: RGB) {
+        self.init(.sRGB, red: Double(rgb.r) / 255, green: Double(rgb.g) / 255, blue: Double(rgb.b) / 255)
     }
 }
