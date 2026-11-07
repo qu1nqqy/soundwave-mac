@@ -23,6 +23,8 @@
 	<true/>
 	<key>NSAppleEventsUsageDescription</key>
 	<string>Soundwave узнаёт у Music, какой трек играет, и берёт его обложку.</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Soundwave отправляет цвета на плату подсветки в домашней сети.</string>
 	<key>NSAudioCaptureUsageDescription</key>
 	<string>Soundwave слушает звук из Music, чтобы подсветка пульсировала в такт.</string>
 </dict>
