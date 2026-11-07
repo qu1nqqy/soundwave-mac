@@ -3,13 +3,26 @@ import SwiftUI
 
 /// Окно, которое открывается по клику на иконку в строке меню.
 struct MenuView: View {
-    let state: AppState
+    @Bindable var state: AppState
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             NowPlayingView(track: state.track, artwork: state.artwork)
             if !state.palette.isEmpty {
                 PaletteView(palette: state.palette, dominant: state.dominant)
+            }
+            Divider()
+            Toggle("Подсветка", isOn: $state.enabled).toggleStyle(.switch)
+            Picker("Режим", selection: $state.mode) {
+                Text("Один цвет").tag(LightMode.single)
+                Text("Сочетание").tag(LightMode.palette)
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            VStack(alignment: .leading, spacing: 4) {
+                TextField("IP платы, например 192.168.1.50", text: $state.host)
+                    .textFieldStyle(.roundedBorder)
+                Text(state.senderStatus).font(.caption).foregroundStyle(.secondary).lineLimit(2)
             }
             Divider()
             HStack {
