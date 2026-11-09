@@ -1,0 +1,123 @@
+name: build
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  # Логика без системных API: форматирование и тесты SoundwaveCore.
+  test:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Toolchain
+        run: swift --version
+
+      - name: Lint
+        run: make lint
+
+      - name: Run tests
+        run: make test
+
+  # Приложение целиком: собирается и упаковывается в .app.
+  app:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # в CI нет сертификата разработчика — подписываем ad-hoc
+      - name: Build app
+        run: make app SIGN_ID=-
+
+      - name: Pack
+        run: |
+          mkdir -p dist
+          ditto -c -k --keepParent build/Soundwave.app dist/Soundwave.zip
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: soundwave-mac-${{ github.sha }}
+          path: dist/*
+
+  # Версия берётся из Resources/Info.plist (CFBundleShortVersionString). Выпустить одну версию
+  # дважды нельзя: в PR в main (и перед самим релизом) проверяем, что релиза с таким тегом ещё нет.
+  version:
+    if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.version.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Version is new
+        id: version
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION=$(python3 -c "import plistlib; print(plistlib.load(open('Resources/Info.plist', 'rb'))['CFBundleShortVersionString'])")
+          TAG="v${VERSION}"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "::error::Релиз $TAG уже выпущен — подними CFBundleShortVersionString в Resources/Info.plist"
+            exit 1
+          fi
+          echo "Будет выпущен $TAG"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+  release:
+    needs: [test, app, version]
+    # релизы только из main, пуши в dev и PR проходят лишь проверки
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: soundwave-mac-${{ github.sha }}
+          path: dist
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.version.outputs.tag }}
+        run: |
+          gh release create "$TAG" dist/* \
+            --target "$GITHUB_SHA" \
+            --title "Soundwave $TAG" \
+            --notes "Сборка коммита ${GITHUB_SHA}: $(git log -1 --pretty=%s)
+
+          Установка: распаковать \`Soundwave.zip\` в /Applications. Сборка подписана ad-hoc, поэтому при
+          первом запуске: правый клик → «Открыть»."
+
+  notify:
+    needs: [test, app, version, release]
+    if: always()
+    runs-on: ubuntu-latest
+    env:
+      TELEGRAM_TO: ${{ secrets.TELEGRAM_TO }}
+      TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+    steps:
+      # без секретов (например, в форке) просто молчим, а не падаем
+      - name: Notify
+        if: env.TELEGRAM_TOKEN != '' && env.TELEGRAM_TO != ''
+        uses: appleboy/telegram-action@master
+        with:
+          to: ${{ secrets.TELEGRAM_TO }}
+          token: ${{ secrets.TELEGRAM_TOKEN }}
+          format: markdown
+          message: |
+            ${{ (contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')) && '❌ **Сборка упала**' || '✅ **Сборка прошла**' }}
+            Репозиторий: `${{ github.repository }}`
+            Ветка: `${{ github.ref_name }}`
+            Автор: `${{ github.actor }}`
+            test: `${{ needs.test.result }}` · app: `${{ needs.app.result }}` · release: `${{ needs.release.result }}`
+            🔗 [Workflow](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})

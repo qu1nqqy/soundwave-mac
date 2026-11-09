@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleExecutable</key>
+	<string>Soundwave</string>
+	<key>CFBundleIdentifier</key>
+	<string>com.qu1nqqy.soundwave</string>
+	<key>CFBundleName</key>
+	<string>Soundwave</string>
+	<key>CFBundleDisplayName</key>
+	<string>Soundwave</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>0.0.1</string>
+	<key>CFBundleVersion</key>
+	<string>1</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>15.0</string>
+	<!-- только иконка в строке меню, без иконки в Dock -->
+	<key>LSUIElement</key>
+	<true/>
+	<key>NSAppleEventsUsageDescription</key>
+	<string>Soundwave узнаёт у Music, какой трек играет, и берёт его обложку.</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Soundwave отправляет цвета на плату подсветки в домашней сети.</string>
+	<key>NSAudioCaptureUsageDescription</key>
+	<string>Soundwave слушает звук из Music, чтобы подсветка пульсировала в такт.</string>
+</dict>
+</plist>
