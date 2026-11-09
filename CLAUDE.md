@@ -39,6 +39,12 @@ Makefile выставляет `DEVELOPER_DIR` на Xcode: у Command Line Tools 
   `feat: добавил захват звука`, `fix: исправил …`, `refactor: …`, `test: …`, `ci: …`, `docs: …`, `chore: …`.
 - Каждый коммит с трейлером `Co-Authored-By: Claude …`.
 
+## Версии
+
+- Semver, версия — `CFBundleShortVersionString` в `Resources/Info.plist`. Релиз — тег `v<версия>`.
+- Перед PR `dev` → `main` поднять версию: исправления — патч (0.0.1 → 0.0.2), новые возможности — минор.
+  CI (`version`) не даст выпустить уже существующую версию.
+
 ## Ветки
 
 - `dev` — рабочая ветка, коммиты идут сюда.
