@@ -9,12 +9,56 @@ on:
 
 permissions:
   contents: read
+  actions: read # tg-notify читает статус шагов
 
 jobs:
+  # Первая задача: создаёт сообщение в Telegram (остальные дописывают в него свои секции)
+  # и проверяет версию из Resources/Info.plist (CFBundleShortVersionString). Выпустить одну версию
+  # дважды нельзя, поэтому в PR в main и перед самим релизом проверяем, что такого релиза ещё нет.
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.version.outputs.tag }}
+      tg_message_id: ${{ steps.tg.outputs.message_id }}
+    steps:
+      # первым шагом: без секретов (например, в форке) только предупредит, сборку не уронит
+      - id: tg
+        uses: qu1nqqy/tg-notify@v1
+        with:
+          token: ${{ secrets.TELEGRAM_TOKEN }}
+          chat_id: ${{ secrets.TELEGRAM_CHAT_ID }}
+          topic_id: ${{ vars.TELEGRAM_TOPIC_ID }}
+
+      - uses: actions/checkout@v4
+
+      - name: Version is new
+        id: version
+        env:
+          GH_TOKEN: ${{ github.token }}
+          # в dev версию не поднимаем на каждый пуш — там только показываем её
+          STRICT: ${{ github.event_name == 'pull_request' || github.ref == 'refs/heads/main' }}
+        run: |
+          VERSION=$(python3 -c "import plistlib; print(plistlib.load(open('Resources/Info.plist', 'rb'))['CFBundleShortVersionString'])")
+          TAG="v${VERSION}"
+          if [ "$STRICT" = true ] && gh release view "$TAG" >/dev/null 2>&1; then
+            echo "::error::Релиз $TAG уже выпущен — подними CFBundleShortVersionString в Resources/Info.plist"
+            exit 1
+          fi
+          echo "Версия $TAG"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
   # Логика без системных API: форматирование и тесты SoundwaveCore.
   test:
+    needs: version
     runs-on: macos-latest
     steps:
+      - uses: qu1nqqy/tg-notify@v1
+        with:
+          token: ${{ secrets.TELEGRAM_TOKEN }}
+          chat_id: ${{ secrets.TELEGRAM_CHAT_ID }}
+          topic_id: ${{ vars.TELEGRAM_TOPIC_ID }}
+          message_id: ${{ needs.version.outputs.tg_message_id }}
+
       - uses: actions/checkout@v4
 
       - name: Toolchain
@@ -28,8 +72,16 @@ jobs:
 
   # Приложение целиком: собирается и упаковывается в .app.
   app:
+    needs: version
     runs-on: macos-latest
     steps:
+      - uses: qu1nqqy/tg-notify@v1
+        with:
+          token: ${{ secrets.TELEGRAM_TOKEN }}
+          chat_id: ${{ secrets.TELEGRAM_CHAT_ID }}
+          topic_id: ${{ vars.TELEGRAM_TOPIC_ID }}
+          message_id: ${{ needs.version.outputs.tg_message_id }}
+
       - uses: actions/checkout@v4
 
       # в CI нет сертификата разработчика — подписываем ad-hoc
@@ -46,38 +98,22 @@ jobs:
           name: soundwave-mac-${{ github.sha }}
           path: dist/*
 
-  # Версия берётся из Resources/Info.plist (CFBundleShortVersionString). Выпустить одну версию
-  # дважды нельзя: в PR в main (и перед самим релизом) проверяем, что релиза с таким тегом ещё нет.
-  version:
-    if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
-    outputs:
-      tag: ${{ steps.version.outputs.tag }}
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Version is new
-        id: version
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          VERSION=$(python3 -c "import plistlib; print(plistlib.load(open('Resources/Info.plist', 'rb'))['CFBundleShortVersionString'])")
-          TAG="v${VERSION}"
-          if gh release view "$TAG" >/dev/null 2>&1; then
-            echo "::error::Релиз $TAG уже выпущен — подними CFBundleShortVersionString в Resources/Info.plist"
-            exit 1
-          fi
-          echo "Будет выпущен $TAG"
-          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
-
   release:
     needs: [test, app, version]
     # релизы только из main, пуши в dev и PR проходят лишь проверки
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
-      contents: write
+      contents: write # gh release create
+      actions: read # свой блок permissions заменяет общий целиком
     steps:
+      - uses: qu1nqqy/tg-notify@v1
+        with:
+          token: ${{ secrets.TELEGRAM_TOKEN }}
+          chat_id: ${{ secrets.TELEGRAM_CHAT_ID }}
+          topic_id: ${{ vars.TELEGRAM_TOPIC_ID }}
+          message_id: ${{ needs.version.outputs.tg_message_id }}
+
       - uses: actions/checkout@v4
 
       - uses: actions/download-artifact@v4
@@ -98,26 +134,12 @@ jobs:
           Установка: распаковать \`Soundwave.zip\` в /Applications. Сборка подписана ad-hoc, поэтому при
           первом запуске: правый клик → «Открыть»."
 
-  notify:
-    needs: [test, app, version, release]
-    if: always()
-    runs-on: ubuntu-latest
-    env:
-      TELEGRAM_TO: ${{ secrets.TELEGRAM_TO }}
-      TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
-    steps:
-      # без секретов (например, в форке) просто молчим, а не падаем
-      - name: Notify
-        if: env.TELEGRAM_TOKEN != '' && env.TELEGRAM_TO != ''
-        uses: appleboy/telegram-action@master
+      # отдельное закреплённое сообщение о релизе с архивом приложения
+      - uses: qu1nqqy/tg-notify@v1
         with:
-          to: ${{ secrets.TELEGRAM_TO }}
+          mode: release
           token: ${{ secrets.TELEGRAM_TOKEN }}
-          format: markdown
-          message: |
-            ${{ (contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')) && '❌ **Сборка упала**' || '✅ **Сборка прошла**' }}
-            Репозиторий: `${{ github.repository }}`
-            Ветка: `${{ github.ref_name }}`
-            Автор: `${{ github.actor }}`
-            test: `${{ needs.test.result }}` · app: `${{ needs.app.result }}` · release: `${{ needs.release.result }}`
-            🔗 [Workflow](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})
+          chat_id: ${{ secrets.TELEGRAM_CHAT_ID }}
+          topic_id: ${{ vars.TELEGRAM_TOPIC_ID }}
+          tag: ${{ needs.version.outputs.tag }}
+          files: dist/*
